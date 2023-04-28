@@ -35,7 +35,7 @@ fn debug_report(flags: vk.DebugReportFlagsEXT.IntType, objectType: vk.DebugRepor
     _ = location;
     _ = object;
     _ = flags;
-    std.debug.print("[vulkan] ObjectType: {}\nMessage: {s}\n\n", .{ objectType, pMessage });
+    std.debug.print("[vulkan] ObjectType: {}\nMessage: {?s}\n\n", .{ objectType, pMessage });
     @panic("VK Error");
     //return vk.FALSE;
 }
@@ -67,7 +67,7 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
             g_Instance = try vk.CreateInstance(create_info, g_Allocator);
 
             // Get the function pointer (required for any extensions)
-            var vkCreateDebugReportCallbackEXT = @ptrCast(?@TypeOf(vk.vkCreateDebugReportCallbackEXT), vk.GetInstanceProcAddr(g_Instance, "vkCreateDebugReportCallbackEXT")).?;
+            var vkCreateDebugReportCallbackEXT = @ptrCast(?*const @TypeOf(vk.vkCreateDebugReportCallbackEXT), vk.GetInstanceProcAddr(g_Instance, "vkCreateDebugReportCallbackEXT")).?;
 
             // Setup the debug report callback
             var debug_report_ci = vk.DebugReportCallbackCreateInfoEXT{
@@ -97,7 +97,7 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
         // If a number >1 of GPUs got reported, find discrete GPU if present, or use first one available. This covers
         // most common cases (multi-gpu/integrated+dedicated graphics). Handling more complicated setups (multiple
         // dedicated GPUs) is out of scope of this sample.
-        const use_gpu = for (gpus) |gpu, i| {
+        const use_gpu = for (gpus, 0..) |gpu, i| {
             const properties = vk.GetPhysicalDeviceProperties(gpu);
             if (properties.deviceType == .DISCRETE_GPU) break i;
         } else 0;
@@ -110,7 +110,7 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
         var queues = try allocator.alloc(vk.QueueFamilyProperties, count);
         defer allocator.free(queues);
         _ = vk.GetPhysicalDeviceQueueFamilyProperties(g_PhysicalDevice, queues);
-        for (queues) |queue, i| {
+        for (queues, 0..) |queue, i| {
             if (queue.queueFlags.graphics) {
                 g_QueueFamily = @intCast(u32, i);
                 break;
@@ -200,7 +200,7 @@ fn CleanupVulkan() void {
 
     if (IMGUI_VULKAN_DEBUG_REPORT) {
         // Remove the debug report callback
-        const vkDestroyDebugReportCallbackEXT = @ptrCast(?@TypeOf(vk.vkDestroyDebugReportCallbackEXT), vk.GetInstanceProcAddr(g_Instance, "vkDestroyDebugReportCallbackEXT"));
+        const vkDestroyDebugReportCallbackEXT = @ptrCast(?*const @TypeOf(vk.vkDestroyDebugReportCallbackEXT), vk.GetInstanceProcAddr(g_Instance, "vkDestroyDebugReportCallbackEXT"));
         assert(vkDestroyDebugReportCallbackEXT != null);
         vkDestroyDebugReportCallbackEXT.?(g_Instance, g_DebugReport, g_Allocator);
     }
@@ -520,11 +520,11 @@ fn ArrayPtrType(comptime ptrType: type) type {
         assert(info.Pointer.sentinel == null);
 
         // Create the new value type, [1]T
-        const arrayInfo = std.builtin.TypeInfo{
+        const arrayInfo = std.builtin.Type{
             .Array = .{
                 .len = 1,
                 .child = info.Pointer.child,
-                .sentinel = @as(?info.Pointer.child, null),
+                .sentinel = null,
             },
         };
 
@@ -533,7 +533,7 @@ fn ArrayPtrType(comptime ptrType: type) type {
         info.Pointer.child = singleArrayType;
         // also need to change the type of the sentinel
         // we checked that this is null above so no work needs to be done here.
-        info.Pointer.sentinel = @as(?singleArrayType, null);
+        info.Pointer.sentinel = null;
         return @Type(info);
     }
 }

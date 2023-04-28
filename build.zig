@@ -9,7 +9,7 @@ const imgui_build = @import("zig-imgui/imgui_build.zig");
 const glslc_command = if (builtin.os.tag == .windows) "tools/win/glslc.exe" else "glslc";
 
 pub fn build(b: *Builder) void {
-    const mode = b.standardReleaseOptions();
+    const mode = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
     imgui_build.addTestStep(b, "test", mode, target);
@@ -27,14 +27,18 @@ pub fn build(b: *Builder) void {
 }
 
 fn exampleExe(b: *Builder, comptime name: []const u8, mode: std.builtin.Mode, target: std.zig.CrossTarget) *LibExeObjStep {
-    const exe = b.addExecutable(name, "examples/" ++ name ++ ".zig");
-    exe.setBuildMode(mode);
-    exe.setTarget(target);
-    imgui_build.link(exe);
-    exe.install();
+    const exe = b.addExecutable(.{
+        .name = name,
+        .root_source_file = .{ .path = "examples/" ++ name ++ ".zig" },
+        .optimize = mode,
+        .target = target,
+    });
+
+    imgui_build.prepareAndLink(b, exe);
+    b.installArtifact(exe);
 
     const run_step = b.step(name, "Run " ++ name);
-    const run_cmd = exe.run();
+    const run_cmd = b.addRunArtifact(exe);
     run_step.dependOn(&run_cmd.step);
 
     return exe;
@@ -42,7 +46,7 @@ fn exampleExe(b: *Builder, comptime name: []const u8, mode: std.builtin.Mode, ta
 
 fn linkGlad(exe: *LibExeObjStep, target: std.zig.CrossTarget) void {
     _ = target;
-    exe.addIncludeDir("examples/include/c_include");
+    exe.addIncludePath("examples/include/c_include");
     exe.addCSourceFile("examples/c_src/glad.c", &[_][]const u8{"-std=c99"});
     //exe.linkSystemLibrary("opengl");
 }

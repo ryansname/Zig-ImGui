@@ -1,6 +1,5 @@
 const std = @import("std");
 const version: std.SemanticVersion = @import("builtin").zig_version;
-const old_pkg_structure = version.order(std.SemanticVersion.parse("0.9.1") catch unreachable) != .gt;
 
 // @src() is only allowed inside of a function, so we need this wrapper
 fn srcFile() []const u8 { return @src().file; }
@@ -8,17 +7,30 @@ const sep = std.fs.path.sep_str;
 
 const zig_imgui_path = std.fs.path.dirname(srcFile()).?;
 const zig_imgui_file = zig_imgui_path ++ sep ++ "imgui.zig";
-pub const pkg = if (old_pkg_structure) std.build.Pkg{
-    .name = "imgui",
-    .path = .{ .path = zig_imgui_file },
-} else std.build.Pkg{
-    .name = "imgui",
-    .source = .{ .path = zig_imgui_file },
-};
+
+var module: ?*std.Build.Module = null;
+
+pub fn prepareModule(b: *std.Build) *std.Build.Module {
+    if (module) |mod| {
+        std.debug.assert(mod.builder == b);
+        return mod;
+    }
+
+    var mod = b.createModule(.{
+        .source_file = .{ .path = zig_imgui_file },
+    });
+    module = mod;
+    return mod;
+}
 
 pub fn link(exe: *std.build.LibExeObjStep) void {
     linkWithoutPackage(exe);
-    exe.addPackage(pkg);
+    exe.addModule("imgui", module.?);
+}
+
+pub fn prepareAndLink(b: *std.Build, exe: *std.Build.LibExeObjStep) void {
+    linkWithoutPackage(exe);
+    exe.addModule("imgui", prepareModule(b));
 }
 
 pub fn linkWithoutPackage(exe: *std.build.LibExeObjStep) void {
@@ -37,11 +49,13 @@ pub fn addTestStep(
     mode: std.builtin.Mode,
     target: std.zig.CrossTarget,
 ) void {
-    const test_exe = b.addTest(zig_imgui_path ++ std.fs.path.sep_str ++ "tests.zig");
-    test_exe.setBuildMode(mode);
-    test_exe.setTarget(target);
+    const test_exe = b.addTest(.{
+        .root_source_file = .{ .path = zig_imgui_path ++ std.fs.path.sep_str ++ "tests.zig" } ,
+        .optimize = mode,
+        .target = target,
+    });
     
-    link(test_exe);
+    prepareAndLink(b, test_exe);
 
     const test_step = b.step(step_name, "Run zig-imgui tests");
     test_step.dependOn(&test_exe.step);
