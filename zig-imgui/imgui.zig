@@ -8,7 +8,7 @@ const builtin = @import("builtin");
 const assert = @import("std").debug.assert;
 const imgui = @This();
 
-pub const DrawCallback_ResetRenderState = @intToPtr(DrawCallback, ~@as(usize, 0));
+pub const DrawCallback_ResetRenderState = @intToPtr(DrawCallback, ~@as(usize, 3));
 
 pub const VERSION = "1.88";
 pub fn CHECKVERSION() void {
@@ -91,7 +91,7 @@ pub fn Vector(comptime T: type) type {
             var cloned = @This(){};
             if (self.Size != 0) {
                 cloned.resize_undefined(self.Size);
-                @memcpy(@ptrCast([*]u8, cloned.Data.?), @ptrCast([*]const u8, self.Data.?), self.Size * @sizeOf(T));
+                @memcpy(@ptrCast([*]u8, cloned.Data.?), @ptrCast([*]const u8, self.Data.?)[0..self.Size * @sizeOf(T)]);
             }
             return cloned;
         }
@@ -100,7 +100,7 @@ pub fn Vector(comptime T: type) type {
             self.Size = 0;
             if (other.Size != 0) {
                 self.resize_undefined(other.Size);
-                @memcpy(@ptrCast([*]u8, self.Data.?), @ptrCast([*]const u8, other.Data.?), other.Size * @sizeOf(T));
+                @memcpy(@ptrCast([*]u8, self.Data.?), @ptrCast([*]const u8, other.Data.?)[0..other.Size * @sizeOf(T)]);
             }
         }
 
@@ -108,7 +108,7 @@ pub fn Vector(comptime T: type) type {
             var result = @This(){};
             if (slice.len != 0) {
                 result.resize_undefined(@intCast(u32, slice.len));
-                @memcpy(@ptrCast([*]u8, result.Data.?), @ptrCast([*]const u8, slice.ptr), slice.len * @sizeOf(T));
+                @memcpy(@ptrCast([*]u8, result.Data.?), @ptrCast([*]const u8, slice.ptr)[0..slice.len * @sizeOf(T)]);
             }
             return result;
         }
@@ -202,7 +202,7 @@ pub fn Vector(comptime T: type) type {
             const new_data = @ptrCast(?[*]T, @alignCast(@alignOf(T), raw.igMemAlloc(new_capacity * @sizeOf(T))));
             if (self.Data) |sd| {
                 if (self.Size != 0) {
-                    @memcpy(@ptrCast([*]u8, new_data.?), @ptrCast([*]const u8, sd), self.Size * @sizeOf(T));
+                    @memcpy(@ptrCast([*]u8, new_data.?), @ptrCast([*]const u8, sd)[0..self.Size * @sizeOf(T)]);
                 }
                 raw.igMemFree(@ptrCast(*anyopaque, sd));
             }
