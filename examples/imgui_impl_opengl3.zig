@@ -30,7 +30,7 @@
 //----------------------------------------
 
 const std = @import("std");
-const imgui = @import("imgui");
+const imgui = @import("imgui.zig");
 const gl = @import("include/gl.zig");
 const builtin = @import("builtin");
 
@@ -66,7 +66,7 @@ const Data = extern struct {
 };
 
 fn GetBackendData() ?*Data {
-    return if (imgui.GetCurrentContext() != null) @ptrCast(?*Data, @alignCast(@alignOf(Data), imgui.GetIO().BackendRendererUserData)) else null;
+    return if (imgui.GetCurrentContext() != null) @as(?*Data, @ptrCast(@alignCast(imgui.GetIO().BackendRendererUserData))) else null;
 }
 
 // Functions
@@ -74,7 +74,7 @@ pub fn Init(glsl_version_opt: ?[]const u8) bool {
     const io = imgui.GetIO();
     assert(io.BackendRendererUserData == null); // Already initialized a renderer backend
 
-    const bd = @ptrCast(*Data, @alignCast(@alignOf(Data), imgui.MemAlloc(@sizeOf(Data))));
+    const bd = @as(*Data, @ptrCast(@alignCast(imgui.MemAlloc(@sizeOf(Data)))));
     bd.* = .{};
 
     io.BackendRendererUserData = bd;
@@ -87,11 +87,11 @@ pub fn Init(glsl_version_opt: ?[]const u8) bool {
     gl.glGetIntegerv(gl.GL_MINOR_VERSION, &minor);
     if (major == 0 and minor == 0) {
         const gl_version = gl.glGetString(gl.GL_VERSION);
-        var it = std.mem.tokenize(u8, std.mem.span(gl_version), ".");
+        var it = std.mem.tokenizeAny(u8, std.mem.span(gl_version), ".");
         major = std.fmt.parseInt(gl.GLint, it.next() orelse "0", 10) catch 0;
         minor = std.fmt.parseInt(gl.GLint, it.next() orelse "0", 10) catch 0;
     }
-    bd.GlVersion = @intCast(gl.GLuint, major * 100 + minor);
+    bd.GlVersion = @as(gl.GLuint, @intCast(major * 100 + minor));
 
     // Query vendor to enable glBufferSubData kludge
     if (builtin.os.tag == .windows) {
@@ -113,7 +113,7 @@ pub fn Init(glsl_version_opt: ?[]const u8) bool {
     const glsl_version: []const u8 = glsl_version_opt orelse default_glsl_version;
 
     assert(glsl_version.len + 2 < bd.GlslVersionString.len);
-    std.mem.copy(u8, bd.GlslVersionString[0..glsl_version.len], glsl_version);
+    std.mem.copyForwards(u8, bd.GlslVersionString[0..glsl_version.len], glsl_version);
     bd.GlslVersionString[glsl_version.len] = '\n';
     bd.GlslVersionString[glsl_version.len + 1] = 0;
 
@@ -129,7 +129,7 @@ pub fn Init(glsl_version_opt: ?[]const u8) bool {
         gl.glGetIntegerv(gl.GL_NUM_EXTENSIONS, &extensions);
         var i: gl.GLint = 0;
         while (i < extensions) : (i += 1) {
-            if (gl.glGetStringi(gl.GL_EXTENSIONS, @intCast(gl.GLuint, i))) |ext_nt| {
+            if (gl.glGetStringi(gl.GL_EXTENSIONS, @as(gl.GLuint, @intCast(i)))) |ext_nt| {
                 const ext = std.mem.span(ext_nt);
                 if (std.mem.eql(u8, ext, "GL_ARB_clip_control"))
                     bd.HasClipOrigin = true;
@@ -186,9 +186,9 @@ fn SetupRenderState(draw_data: *imgui.DrawData, fb_width: c_int, fb_height: c_in
 
     // Setup viewport, orthographic projection matrix
     // Our visible imgui space lies from draw_data.DisplayPos (top left) to draw_data.DisplayPos+data_data.DisplaySize (bottom right). DisplayPos is (0,0) for single viewport apps.
-    gl.glViewport(0, 0, @intCast(gl.GLsizei, fb_width), @intCast(gl.GLsizei, fb_height));
-    var L = draw_data.DisplayPos.x;
-    var R = draw_data.DisplayPos.x + draw_data.DisplaySize.x;
+    gl.glViewport(0, 0, @as(gl.GLsizei, fb_width), @as(gl.GLsizei, fb_height));
+    const L = draw_data.DisplayPos.x;
+    const R = draw_data.DisplayPos.x + draw_data.DisplaySize.x;
     var T = draw_data.DisplayPos.y;
     var B = draw_data.DisplayPos.y + draw_data.DisplaySize.y;
     if (MAY_HAVE_CLIP_ORIGIN and !clip_origin_lower_left) {
@@ -212,32 +212,32 @@ fn SetupRenderState(draw_data: *imgui.DrawData, fb_width: c_int, fb_height: c_in
     // Bind vertex/index buffers and setup attributes for ImDrawVert
     gl.glBindBuffer(gl.GL_ARRAY_BUFFER, bd.VboHandle);
     gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, bd.ElementsHandle);
-    gl.glEnableVertexAttribArray(@intCast(c_uint, bd.AttribLocationVtxPos));
-    gl.glEnableVertexAttribArray(@intCast(c_uint, bd.AttribLocationVtxUV));
-    gl.glEnableVertexAttribArray(@intCast(c_uint, bd.AttribLocationVtxColor));
+    gl.glEnableVertexAttribArray(@as(c_uint, @intCast(bd.AttribLocationVtxPos)));
+    gl.glEnableVertexAttribArray(@as(c_uint, @intCast(bd.AttribLocationVtxUV)));
+    gl.glEnableVertexAttribArray(@as(c_uint, @intCast(bd.AttribLocationVtxColor)));
     gl.glVertexAttribPointer(
-        @intCast(c_uint, bd.AttribLocationVtxPos),
+        @as(c_uint, @intCast(bd.AttribLocationVtxPos)),
         2,
         gl.GL_FLOAT,
         gl.GL_FALSE,
         @sizeOf(imgui.DrawVert),
-        @intToPtr(?*anyopaque, @offsetOf(imgui.DrawVert, "pos")),
+        @as(?*anyopaque, @ptrFromInt(@offsetOf(imgui.DrawVert, "pos"))),
     );
     gl.glVertexAttribPointer(
-        @intCast(c_uint, bd.AttribLocationVtxUV),
+        @as(c_uint, @intCast(bd.AttribLocationVtxUV)),
         2,
         gl.GL_FLOAT,
         gl.GL_FALSE,
         @sizeOf(imgui.DrawVert),
-        @intToPtr(?*anyopaque, @offsetOf(imgui.DrawVert, "uv")),
+        @as(?*anyopaque, @ptrFromInt(@offsetOf(imgui.DrawVert, "uv"))),
     );
     gl.glVertexAttribPointer(
-        @intCast(c_uint, bd.AttribLocationVtxColor),
+        @as(c_uint, @intCast(bd.AttribLocationVtxColor)),
         4,
         gl.GL_UNSIGNED_BYTE,
         gl.GL_TRUE,
         @sizeOf(imgui.DrawVert),
-        @intToPtr(?*anyopaque, @offsetOf(imgui.DrawVert, "col")),
+        @as(?*anyopaque, @ptrFromInt(@offsetOf(imgui.DrawVert, "col"))),
     );
 }
 
@@ -257,15 +257,15 @@ fn getGLInts(name: gl.GLenum, comptime N: comptime_int) [N]gl.GLint {
 // This is in order to be able to run within any OpenGL engine that doesn't do so.
 pub fn RenderDrawData(draw_data: *imgui.DrawData) void {
     // Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
-    const fb_width = @floatToInt(c_int, draw_data.DisplaySize.x * draw_data.FramebufferScale.x);
-    const fb_height = @floatToInt(c_int, draw_data.DisplaySize.y * draw_data.FramebufferScale.y);
+    const fb_width = @as(c_int, @intFromFloat(draw_data.DisplaySize.x * draw_data.FramebufferScale.x));
+    const fb_height = @as(c_int, @intFromFloat(draw_data.DisplaySize.y * draw_data.FramebufferScale.y));
     if (fb_width <= 0 or fb_height <= 0)
         return;
 
     const bd = GetBackendData().?;
 
     // Backup GL state
-    const last_active_texture = @intCast(gl.GLenum, getGLInt(gl.GL_ACTIVE_TEXTURE));
+    const last_active_texture = @as(gl.GLenum, @intCast(getGLInt(gl.GL_ACTIVE_TEXTURE)));
     gl.glActiveTexture(gl.GL_TEXTURE0);
     const last_program = getGLInt(gl.GL_CURRENT_PROGRAM);
     const last_texture = getGLInt(gl.GL_TEXTURE_BINDING_2D);
@@ -277,12 +277,12 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData) void {
 
     const last_viewport = getGLInts(gl.GL_VIEWPORT, 4);
     const last_scissor_box = getGLInts(gl.GL_SCISSOR_BOX, 4);
-    const last_blend_src_rgb = @intCast(gl.GLenum, getGLInt(gl.GL_BLEND_SRC_RGB));
-    const last_blend_dst_rgb = @intCast(gl.GLenum, getGLInt(gl.GL_BLEND_DST_RGB));
-    const last_blend_src_alpha = @intCast(gl.GLenum, getGLInt(gl.GL_BLEND_SRC_ALPHA));
-    const last_blend_dst_alpha = @intCast(gl.GLenum, getGLInt(gl.GL_BLEND_DST_ALPHA));
-    const last_blend_equation_rgb = @intCast(gl.GLenum, getGLInt(gl.GL_BLEND_EQUATION_RGB));
-    const last_blend_equation_alpha = @intCast(gl.GLenum, getGLInt(gl.GL_BLEND_EQUATION_ALPHA));
+    const last_blend_src_rgb = @as(gl.GLenum, @intCast(getGLInt(gl.GL_BLEND_SRC_RGB)));
+    const last_blend_dst_rgb = @as(gl.GLenum, @intCast(getGLInt(gl.GL_BLEND_DST_RGB)));
+    const last_blend_src_alpha = @as(gl.GLenum, @intCast(getGLInt(gl.GL_BLEND_SRC_ALPHA)));
+    const last_blend_dst_alpha = @as(gl.GLenum, @intCast(getGLInt(gl.GL_BLEND_DST_ALPHA)));
+    const last_blend_equation_rgb = @as(gl.GLenum, @intCast(getGLInt(gl.GL_BLEND_EQUATION_RGB)));
+    const last_blend_equation_alpha = @as(gl.GLenum, @intCast(getGLInt(gl.GL_BLEND_EQUATION_ALPHA)));
     const last_enable_blend = gl.glIsEnabled(gl.GL_BLEND);
     const last_enable_cull_face = gl.glIsEnabled(gl.GL_CULL_FACE);
     const last_enable_depth_test = gl.glIsEnabled(gl.GL_DEPTH_TEST);
@@ -301,12 +301,12 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData) void {
     SetupRenderState(draw_data, fb_width, fb_height, vertex_array_object);
 
     // Will project scissor/clipping rectangles into framebuffer space
-    var clip_off = draw_data.DisplayPos; // (0,0) unless using multi-viewports
-    var clip_scale = draw_data.FramebufferScale; // (1,1) unless using retina display which are often (2,2)
+    const clip_off = draw_data.DisplayPos; // (0,0) unless using multi-viewports
+    const clip_scale = draw_data.FramebufferScale; // (1,1) unless using retina display which are often (2,2)
 
     // Render command lists
     if (draw_data.CmdListsCount > 0) {
-        for (draw_data.CmdLists.?[0..@intCast(usize, draw_data.CmdListsCount)]) |cmd_list| {
+        for (draw_data.CmdLists.?[0..@as(usize, @intCast(draw_data.CmdListsCount))]) |cmd_list| {
             // Upload vertex/index buffers
             // - On Intel windows drivers we got reports that regular glBufferData() led to accumulating leaks when using multi-viewports, so we started using orphaning + glBufferSubData(). (See https://github.com/ocornut/imgui/issues/4468)
             // - On NVIDIA drivers we got reports that using orphaning + glBufferSubData() led to glitches when using multi-viewports.
@@ -333,18 +333,18 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData) void {
                 if (pcmd.UserCallback) |fnPtr| {
                     // User callback, registered via ImDrawList::AddCallback()
                     // (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
-                    if (fnPtr == imgui.DrawCallback_ResetRenderState) {
+                    if (@intFromPtr(fnPtr) == imgui.DrawCallback_ResetRenderState) {
                         SetupRenderState(draw_data, fb_width, fb_height, vertex_array_object);
                     } else {
                         fnPtr(cmd_list, &pcmd);
                     }
                 } else {
                     // Project scissor/clipping rectangles into framebuffer space
-                    var clip_min = imgui.Vec2{
+                    const clip_min = imgui.Vec2{
                         .x = (pcmd.ClipRect.x - clip_off.x) * clip_scale.x,
                         .y = (pcmd.ClipRect.y - clip_off.y) * clip_scale.y,
                     };
-                    var clip_max = imgui.Vec2{
+                    const clip_max = imgui.Vec2{
                         .x = (pcmd.ClipRect.z - clip_off.x) * clip_scale.x,
                         .y = (pcmd.ClipRect.w - clip_off.y) * clip_scale.y,
                     };
@@ -353,28 +353,28 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData) void {
 
                     // Apply scissor/clipping rectangle (Y is inverted in OpenGL)
                     gl.glScissor(
-                        @floatToInt(c_int, clip_min.x),
-                        fb_height - @floatToInt(c_int, clip_max.y),
-                        @floatToInt(c_int, clip_max.x - clip_min.x),
-                        @floatToInt(c_int, clip_max.y - clip_min.y),
+                        @as(c_int, @intFromFloat(clip_min.x)),
+                        fb_height - @as(c_int, @intFromFloat(clip_max.y)),
+                        @as(c_int, @intFromFloat(clip_max.x - clip_min.x)),
+                        @as(c_int, @intFromFloat(clip_max.y - clip_min.y)),
                     );
 
                     // Bind texture, Draw
-                    gl.glBindTexture(gl.GL_TEXTURE_2D, @intCast(gl.GLuint, @ptrToInt(pcmd.GetTexID())));
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, @as(gl.GLuint, @intCast(@intFromPtr(pcmd.GetTexID()))));
                     if (MAY_HAVE_VTX_OFFSET and bd.GlVersion >= 320) {
                         gl.glDrawElementsBaseVertex(
                             gl.GL_TRIANGLES,
-                            @intCast(gl.GLsizei, pcmd.ElemCount),
+                            @as(gl.GLsizei, @intCast(pcmd.ElemCount)),
                             if (@sizeOf(imgui.DrawIdx) == 2) gl.GL_UNSIGNED_SHORT else gl.GL_UNSIGNED_INT,
-                            @intToPtr(?*const anyopaque, pcmd.IdxOffset * @sizeOf(imgui.DrawIdx)),
-                            @intCast(gl.GLint, pcmd.VtxOffset),
+                            @as(?*const anyopaque, @ptrFromInt(pcmd.IdxOffset * @sizeOf(imgui.DrawIdx))),
+                            @as(gl.GLint, @intCast(pcmd.VtxOffset)),
                         );
                     } else {
                         gl.glDrawElements(
                             gl.GL_TRIANGLES,
-                            @intCast(gl.GLsizei, pcmd.ElemCount),
+                            @as(gl.GLsizei, @intCast(pcmd.ElemCount)),
                             if (@sizeOf(imgui.DrawIdx) == 2) gl.GL_UNSIGNED_SHORT else gl.GL_UNSIGNED_INT,
-                            @intToPtr(?*const anyopaque, pcmd.IdxOffset * @sizeOf(imgui.DrawIdx)),
+                            @as(?*const anyopaque, @ptrFromInt(pcmd.IdxOffset * @sizeOf(imgui.DrawIdx))),
                         );
                     }
                 }
@@ -386,12 +386,12 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData) void {
     gl.glDeleteVertexArrays(1, &vertex_array_object);
 
     // Restore modified GL state
-    gl.glUseProgram(@intCast(c_uint, last_program));
-    gl.glBindTexture(gl.GL_TEXTURE_2D, @intCast(c_uint, last_texture));
+    gl.glUseProgram(@as(c_uint, @intCast(last_program)));
+    gl.glBindTexture(gl.GL_TEXTURE_2D, @as(c_uint, @intCast(last_texture)));
     if (MAY_HAVE_BIND_SAMPLER and bd.GlVersion >= 330) gl.glBindSampler(0, last_sampler);
     gl.glActiveTexture(last_active_texture);
-    gl.glBindVertexArray(@intCast(c_uint, last_vertex_array_object));
-    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, @intCast(c_uint, last_array_buffer));
+    gl.glBindVertexArray(@as(c_uint, @intCast(last_vertex_array_object)));
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, @as(c_uint, @intCast(last_array_buffer)));
     gl.glBlendEquationSeparate(last_blend_equation_rgb, last_blend_equation_alpha);
     gl.glBlendFuncSeparate(last_blend_src_rgb, last_blend_dst_rgb, last_blend_src_alpha, last_blend_dst_alpha);
     if (last_enable_blend != 0) gl.glEnable(gl.GL_BLEND) else gl.glDisable(gl.GL_BLEND);
@@ -401,9 +401,9 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData) void {
     if (last_enable_scissor_test != 0) gl.glEnable(gl.GL_SCISSOR_TEST) else gl.glDisable(gl.GL_SCISSOR_TEST);
     if (MAY_HAVE_PRIMITIVE_RESTART and bd.GlVersion > 310)
         if (last_enable_primitive_restart != 0) gl.glEnable(gl.GL_PRIMITIVE_RESTART) else gl.glDisable(gl.GL_PRIMITIVE_RESTART);
-    if (HAS_POLYGON_MODE) gl.glPolygonMode(gl.GL_FRONT_AND_BACK, @intCast(gl.GLenum, last_polygon_mode[0]));
-    gl.glViewport(last_viewport[0], last_viewport[1], @intCast(gl.GLsizei, last_viewport[2]), @intCast(gl.GLsizei, last_viewport[3]));
-    gl.glScissor(last_scissor_box[0], last_scissor_box[1], @intCast(gl.GLsizei, last_scissor_box[2]), @intCast(gl.GLsizei, last_scissor_box[3]));
+    if (HAS_POLYGON_MODE) gl.glPolygonMode(gl.GL_FRONT_AND_BACK, @as(gl.GLenum, @intCast(last_polygon_mode[0])));
+    gl.glViewport(last_viewport[0], last_viewport[1], @as(gl.GLsizei, last_viewport[2]), @as(gl.GLsizei, last_viewport[3]));
+    gl.glScissor(last_scissor_box[0], last_scissor_box[1], @as(gl.GLsizei, last_scissor_box[2]), @as(gl.GLsizei, last_scissor_box[3]));
 }
 
 fn CreateFontsTexture() bool {
@@ -429,10 +429,10 @@ fn CreateFontsTexture() bool {
     gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels);
 
     // Store our identifier
-    io.Fonts.?.SetTexID(@intToPtr(imgui.TextureID, bd.FontTexture));
+    io.Fonts.?.SetTexID(@as(imgui.TextureID, @ptrFromInt(bd.FontTexture)));
 
     // Restore state
-    gl.glBindTexture(gl.GL_TEXTURE_2D, @intCast(c_uint, last_texture));
+    gl.glBindTexture(gl.GL_TEXTURE_2D, @as(c_uint, @intCast(last_texture)));
 
     return true;
 }
@@ -459,8 +459,8 @@ fn CheckShader(handle: gl.GLuint, desc: []const u8) bool {
     if (log_length > 1) {
         var buf: imgui.Vector(u8) = .{};
         defer buf.deinit();
-        buf.resize_undefined(@intCast(u32, log_length + 1));
-        gl.glGetShaderInfoLog(handle, log_length, null, @ptrCast([*]gl.GLchar, buf.Data.?));
+        buf.resize_undefined(@as(u32, @intCast(log_length + 1)));
+        gl.glGetShaderInfoLog(handle, log_length, null, @as([*]gl.GLchar, buf.Data.?));
         std.debug.print("{s}\n", .{buf.items()});
     }
     return status != gl.GL_FALSE;
@@ -478,8 +478,8 @@ fn CheckProgram(handle: gl.GLuint, desc: []const u8) bool {
     if (log_length > 1) {
         var buf: imgui.Vector(u8) = .{};
         defer buf.deinit();
-        buf.resize_undefined(@intCast(u32, log_length + 1));
-        gl.glGetProgramInfoLog(handle, log_length, null, @ptrCast([*]gl.GLchar, buf.Data.?));
+        buf.resize_undefined(@as(u32, @intCast(log_length + 1)));
+        gl.glGetProgramInfoLog(handle, log_length, null, @as([*]gl.GLchar, buf.Data.?));
         std.debug.print("{s}\n", .{buf.items()});
     }
     return status != gl.GL_FALSE;
@@ -489,9 +489,9 @@ fn CreateDeviceObjects() bool {
     const bd = GetBackendData().?;
 
     // Backup GL state
-    var last_texture = getGLInt(gl.GL_TEXTURE_BINDING_2D);
-    var last_array_buffer = getGLInt(gl.GL_ARRAY_BUFFER_BINDING);
-    var last_vertex_array = getGLInt(gl.GL_VERTEX_ARRAY_BINDING);
+    const last_texture = getGLInt(gl.GL_TEXTURE_BINDING_2D);
+    const last_array_buffer = getGLInt(gl.GL_ARRAY_BUFFER_BINDING);
+    const last_vertex_array = getGLInt(gl.GL_VERTEX_ARRAY_BINDING);
 
     // Parse GLSL version string
     var glsl_version: u32 = 130;
@@ -613,7 +613,7 @@ fn CreateDeviceObjects() bool {
     }
 
     // Create shaders
-    const version_str = @ptrCast([*:0]const u8, &bd.GlslVersionString);
+    const version_str = @as([*:0]const u8, @ptrCast(bd.GlslVersionString[0..31 :0]));
     const vertex_shader_with_version = [_][*:0]const u8{ version_str, vertex_shader };
     const vert_handle = gl.glCreateShader(gl.GL_VERTEX_SHADER);
     gl.glShaderSource(vert_handle, 2, &vertex_shader_with_version, null);
@@ -650,9 +650,9 @@ fn CreateDeviceObjects() bool {
     _ = CreateFontsTexture();
 
     // Restore modified GL state
-    gl.glBindTexture(gl.GL_TEXTURE_2D, @intCast(c_uint, last_texture));
-    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, @intCast(c_uint, last_array_buffer));
-    gl.glBindVertexArray(@intCast(c_uint, last_vertex_array));
+    gl.glBindTexture(gl.GL_TEXTURE_2D, @as(c_uint, @intCast(last_texture)));
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, @as(c_uint, @intCast(last_array_buffer)));
+    gl.glBindVertexArray(@as(c_uint, @intCast(last_vertex_array)));
 
     return true;
 }

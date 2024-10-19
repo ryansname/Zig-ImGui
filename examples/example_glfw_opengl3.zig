@@ -4,7 +4,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const imgui = @import("imgui");
+const imgui = @import("imgui.zig");
 const impl_glfw = @import("imgui_impl_glfw.zig");
 const impl_gl3 = @import("imgui_impl_opengl3.zig");
 const glfw = @import("include/glfw.zig");
@@ -112,7 +112,7 @@ pub fn main() !void {
             _ = imgui.Checkbox("Another Window", &show_another_window);
 
             _ = imgui.SliderFloat("float", &slider_value, 0.0, 1.0); // Edit 1 float using a slider from 0.0 to 1.0
-            _ = imgui.ColorEdit3("clear color", @ptrCast(*[3]f32, &clear_color)); // Edit 3 floats representing a color
+            _ = imgui.ColorEdit3("clear color", @ptrCast(&clear_color)); // Edit 3 floats representing a color
 
             if (imgui.Button("Button")) // Buttons return true when clicked (most widgets return true when edited/activated)
                 counter += 1;

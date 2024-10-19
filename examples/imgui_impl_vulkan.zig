@@ -44,7 +44,7 @@
 //  2016-10-18: Vulkan: Add location decorators & change to use structs as in/out in glsl, update embedded spv (produced with glslangValidator -x). Null the released resources.
 //  2016-08-27: Vulkan: Fix Vulkan example for use when a depth buffer is active.
 
-const imgui = @import("imgui");
+const imgui = @import("imgui.zig");
 const std = @import("std");
 const vk = @import("include/vk.zig");
 const assert = std.debug.assert;
@@ -259,30 +259,30 @@ const __glsl_shader_frag_spv = [_]u32{
 // FIXME: multi-context support is not tested and probably dysfunctional in this backend.
 fn GetBackendData() ?*Data {
     return if (imgui.GetCurrentContext() != null)
-        @ptrCast(?*Data, @alignCast(@alignOf(Data), imgui.GetIO().BackendRendererUserData))
+        @as(?*Data, @ptrCast(@alignCast(imgui.GetIO().BackendRendererUserData)))
     else
         null;
 }
 
 fn MemoryType(properties: vk.MemoryPropertyFlags, type_bits: u32) ?u32 {
     const bd = GetBackendData().?;
-    var v = &bd.VulkanInitInfo;
+    const v = &bd.VulkanInitInfo;
     var prop = vk.GetPhysicalDeviceMemoryProperties(v.PhysicalDevice);
     for (prop.memoryTypes[0..prop.memoryTypeCount], 0..) |memType, i|
-        if (memType.propertyFlags.hasAllSet(properties) and type_bits & (@as(u32, 1) << @intCast(u5, i)) != 0)
-            return @intCast(u32, i);
+        if (memType.propertyFlags.hasAllSet(properties) and type_bits & (@as(u32, @intCast(1)) << @as(u5, @intCast(i))) != 0)
+            return @as(u32, @intCast(i));
     return null; // Unable to find memoryType
 }
 
 fn CreateOrResizeBuffer(buffer: *vk.Buffer, buffer_memory: *vk.DeviceMemory, p_buffer_size: *vk.DeviceSize, new_size: usize, usage: vk.BufferUsageFlags) !void {
     const bd = GetBackendData().?;
-    var v = &bd.VulkanInitInfo;
+    const v = &bd.VulkanInitInfo;
     if (buffer.* != .Null)
         vk.DestroyBuffer(v.Device, buffer.*, v.VkAllocator);
     if (buffer_memory.* != .Null)
         vk.FreeMemory(v.Device, buffer_memory.*, v.VkAllocator);
 
-    var vertex_buffer_size_aligned = ((new_size - 1) / bd.BufferMemoryAlignment + 1) * bd.BufferMemoryAlignment;
+    const vertex_buffer_size_aligned = ((new_size - 1) / bd.BufferMemoryAlignment + 1) * bd.BufferMemoryAlignment;
     const buffer_info = vk.BufferCreateInfo{
         .size = vertex_buffer_size_aligned,
         .usage = usage,
@@ -290,9 +290,9 @@ fn CreateOrResizeBuffer(buffer: *vk.Buffer, buffer_memory: *vk.DeviceMemory, p_b
     };
     buffer.* = try vk.CreateBuffer(v.Device, buffer_info, v.VkAllocator);
 
-    var req = vk.GetBufferMemoryRequirements(v.Device, buffer.*);
+    const req = vk.GetBufferMemoryRequirements(v.Device, buffer.*);
     bd.BufferMemoryAlignment = if (bd.BufferMemoryAlignment > req.alignment) bd.BufferMemoryAlignment else req.alignment;
-    var alloc_info = vk.MemoryAllocateInfo{
+    const alloc_info = vk.MemoryAllocateInfo{
         .allocationSize = req.size,
         .memoryTypeIndex = MemoryType(.{ .hostVisible = true }, req.memoryTypeBits).?,
     };
@@ -323,8 +323,8 @@ fn SetupRenderState(draw_data: *imgui.DrawData, pipeline: vk.Pipeline, command_b
         const viewport = vk.Viewport{
             .x = 0,
             .y = 0,
-            .width = @intToFloat(f32, fb_width),
-            .height = @intToFloat(f32, fb_height),
+            .width = @as(f32, @floatFromInt(fb_width)),
+            .height = @as(f32, @floatFromInt(fb_height)),
             .minDepth = 0.0,
             .maxDepth = 1.0,
         };
@@ -350,8 +350,8 @@ fn SetupRenderState(draw_data: *imgui.DrawData, pipeline: vk.Pipeline, command_b
 // Render function
 pub fn RenderDrawData(draw_data: *imgui.DrawData, command_buffer: vk.CommandBuffer, opt_pipeline: vk.Pipeline) !void {
     // Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
-    const fb_width = @floatToInt(u32, draw_data.DisplaySize.x * draw_data.FramebufferScale.x);
-    const fb_height = @floatToInt(u32, draw_data.DisplaySize.y * draw_data.FramebufferScale.y);
+    const fb_width = @as(u32, @intFromFloat(draw_data.DisplaySize.x * draw_data.FramebufferScale.x));
+    const fb_height = @as(u32, @intFromFloat(draw_data.DisplaySize.y * draw_data.FramebufferScale.y));
     if (fb_width <= 0 or fb_height <= 0)
         return;
 
@@ -369,13 +369,13 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData, command_buffer: vk.CommandBuff
         }
     }
     assert(wrb.FrameRenderBuffers.len == v.ImageCount);
-    wrb.Index = (wrb.Index + 1) % @intCast(u32, wrb.FrameRenderBuffers.len);
+    wrb.Index = (wrb.Index + 1) % @as(u32, @intCast(wrb.FrameRenderBuffers.len));
     const rb = &wrb.FrameRenderBuffers[wrb.Index];
 
     if (draw_data.TotalVtxCount > 0) {
         // Create or resize the vertex/index buffers
-        var vertex_size = @intCast(usize, draw_data.TotalVtxCount) * @sizeOf(imgui.DrawVert);
-        var index_size = @intCast(usize, draw_data.TotalIdxCount) * @sizeOf(imgui.DrawIdx);
+        const vertex_size = @as(usize, @intCast(draw_data.TotalVtxCount)) * @sizeOf(imgui.DrawVert);
+        const index_size = @as(usize, @intCast(draw_data.TotalIdxCount)) * @sizeOf(imgui.DrawIdx);
         if (rb.VertexBuffer == .Null or rb.VertexBufferSize < vertex_size)
             try CreateOrResizeBuffer(&rb.VertexBuffer, &rb.VertexBufferMemory, &rb.VertexBufferSize, vertex_size, .{ .vertexBuffer = true });
         if (rb.IndexBuffer == .Null or rb.IndexBufferSize < index_size)
@@ -384,13 +384,13 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData, command_buffer: vk.CommandBuff
         // Upload vertex/index data into a single contiguous GPU buffer
         var vtx_dst: [*]imgui.DrawVert = undefined;
         var idx_dst: [*]imgui.DrawIdx = undefined;
-        try vk.MapMemory(v.Device, rb.VertexBufferMemory, 0, vertex_size, .{}, @ptrCast(**anyopaque, &vtx_dst));
-        try vk.MapMemory(v.Device, rb.IndexBufferMemory, 0, index_size, .{}, @ptrCast(**anyopaque, &idx_dst));
+        try vk.MapMemory(v.Device, rb.VertexBufferMemory, 0, vertex_size, .{}, @as(**anyopaque, @ptrCast(&vtx_dst)));
+        try vk.MapMemory(v.Device, rb.IndexBufferMemory, 0, index_size, .{}, @as(**anyopaque, @ptrCast(&idx_dst)));
         var n: i32 = 0;
         while (n < draw_data.CmdListsCount) : (n += 1) {
-            const cmd_list = draw_data.CmdLists.?[@intCast(u32, n)];
-            std.mem.copy(imgui.DrawVert, vtx_dst[0..cmd_list.VtxBuffer.size()], cmd_list.VtxBuffer.items());
-            std.mem.copy(imgui.DrawIdx, idx_dst[0..cmd_list.IdxBuffer.size()], cmd_list.IdxBuffer.items());
+            const cmd_list = draw_data.CmdLists.?[@as(u32, @intCast(n))];
+            std.mem.copyForwards(imgui.DrawVert, vtx_dst[0..cmd_list.VtxBuffer.size()], cmd_list.VtxBuffer.items());
+            std.mem.copyForwards(imgui.DrawIdx, idx_dst[0..cmd_list.IdxBuffer.size()], cmd_list.IdxBuffer.items());
             vtx_dst += cmd_list.VtxBuffer.size();
             idx_dst += cmd_list.IdxBuffer.size();
         }
@@ -417,21 +417,21 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData, command_buffer: vk.CommandBuff
     SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
 
     // Will project scissor/clipping rectangles into framebuffer space
-    var clip_off = draw_data.DisplayPos; // (0,0) unless using multi-viewports
-    var clip_scale = draw_data.FramebufferScale; // (1,1) unless using retina display which are often (2,2)
+    const clip_off = draw_data.DisplayPos; // (0,0) unless using multi-viewports
+    const clip_scale = draw_data.FramebufferScale; // (1,1) unless using retina display which are often (2,2)
 
     // Render command lists
     // (Because we merged all buffers into a single one, we maintain our own offset into them)
     var global_vtx_offset = @as(u32, 0);
     var global_idx_offset = @as(u32, 0);
     var n: usize = 0;
-    while (n < @intCast(usize, draw_data.CmdListsCount)) : (n += 1) {
+    while (n < @as(usize, @intCast(draw_data.CmdListsCount))) : (n += 1) {
         const cmd_list = draw_data.CmdLists.?[n];
         for (cmd_list.CmdBuffer.items()) |*pcmd| {
             if (pcmd.UserCallback) |fnPtr| {
                 // User callback, registered via imgui.DrawList::AddCallback()
                 // (imgui.DrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
-                if (fnPtr == imgui.DrawCallback_ResetRenderState) {
+                if (@intFromPtr(fnPtr) == imgui.DrawCallback_ResetRenderState) {
                     SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
                 } else {
                     fnPtr(cmd_list, pcmd);
@@ -448,8 +448,8 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData, command_buffer: vk.CommandBuff
                 };
 
                 // Clamp to viewport as vkCmdSetScissor() won't accept values that are off bounds
-                const fb_width_f = @intToFloat(f32, fb_width);
-                const fb_height_f = @intToFloat(f32, fb_height);
+                const fb_width_f = @as(f32, @floatFromInt(fb_width));
+                const fb_height_f = @as(f32, @floatFromInt(fb_height));
                 if (clip_min.x < 0) clip_min.x = 0;
                 if (clip_min.y < 0) clip_min.y = 0;
                 if (clip_max.x > fb_width_f) clip_max.x = fb_width_f;
@@ -460,27 +460,27 @@ pub fn RenderDrawData(draw_data: *imgui.DrawData, command_buffer: vk.CommandBuff
                 // Apply scissor/clipping rectangle
                 const scissor = vk.Rect2D{
                     .offset = vk.Offset2D{
-                        .x = @floatToInt(i32, clip_min.x),
-                        .y = @floatToInt(i32, clip_min.y),
+                        .x = @as(i32, @intFromFloat(clip_min.x)),
+                        .y = @as(i32, @intFromFloat(clip_min.y)),
                     },
                     .extent = vk.Extent2D{
-                        .width = @floatToInt(u32, clip_max.x - clip_min.x),
-                        .height = @floatToInt(u32, clip_max.y - clip_min.y),
+                        .width = @as(u32, @intFromFloat(clip_max.x - clip_min.x)),
+                        .height = @as(u32, @intFromFloat(clip_max.y - clip_min.y)),
                     },
                 };
                 vk.CmdSetScissor(command_buffer, 0, arrayPtr(&scissor));
 
-                var desc_set = @intToEnum(vk.DescriptorSet, @ptrToInt(pcmd.TextureId));
+                var desc_set = @as(vk.DescriptorSet, @enumFromInt(@intFromPtr(pcmd.TextureId)));
                 if (@sizeOf(imgui.TextureID) < @sizeOf(u64)) {
                     // We don't support texture switches if ImTextureID hasn't been redefined to be 64-bit. Do a flaky check that other textures haven't been used.
-                    assert(@intToEnum(vk.DescriptorSet, @ptrToInt(pcmd.TextureId)) == bd.FontDescriptorSet);
+                    assert(@as(vk.DescriptorSet, @enumFromInt(@intFromPtr(pcmd.TextureId))) == bd.FontDescriptorSet);
                     desc_set = bd.FontDescriptorSet;
                 }
                 vk.CmdBindDescriptorSets(command_buffer, .GRAPHICS, bd.PipelineLayout, 0, arrayPtr(&desc_set), &[_]u32{});
 
                 // Draw
-                const idxStart = @intCast(u32, pcmd.IdxOffset + global_idx_offset);
-                const vtxStart = @intCast(i32, pcmd.VtxOffset + global_vtx_offset);
+                const idxStart = @as(u32, @intCast(pcmd.IdxOffset + global_idx_offset));
+                const vtxStart = @as(i32, @intCast(pcmd.VtxOffset + global_vtx_offset));
                 vk.CmdDrawIndexed(command_buffer, pcmd.ElemCount, 1, idxStart, vtxStart, 0);
             }
         }
@@ -511,16 +511,16 @@ pub fn CreateFontsTexture(command_buffer: vk.CommandBuffer) !void {
     var width: i32 = 0;
     var height: i32 = 0;
     io.Fonts.?.GetTexDataAsRGBA32(&pixels, &width, &height);
-    var upload_size = @intCast(usize, width * height * 4);
+    const upload_size = @as(usize, @intCast(width * height * 4));
 
     // Create the Image:
     {
-        var info = vk.ImageCreateInfo{
+        const info = vk.ImageCreateInfo{
             .imageType = .T_2D,
             .format = .R8G8B8A8_UNORM,
             .extent = vk.Extent3D{
-                .width = @intCast(u32, width),
-                .height = @intCast(u32, height),
+                .width = @as(u32, @intCast(width)),
+                .height = @as(u32, @intCast(height)),
                 .depth = 1,
             },
             .mipLevels = 1,
@@ -532,8 +532,8 @@ pub fn CreateFontsTexture(command_buffer: vk.CommandBuffer) !void {
             .initialLayout = .UNDEFINED,
         };
         bd.FontImage = try vk.CreateImage(v.Device, info, v.VkAllocator);
-        var req = vk.GetImageMemoryRequirements(v.Device, bd.FontImage);
-        var alloc_info = vk.MemoryAllocateInfo{
+        const req = vk.GetImageMemoryRequirements(v.Device, bd.FontImage);
+        const alloc_info = vk.MemoryAllocateInfo{
             .allocationSize = req.size,
             .memoryTypeIndex = MemoryType(.{ .deviceLocal = true }, req.memoryTypeBits).?,
         };
@@ -543,7 +543,7 @@ pub fn CreateFontsTexture(command_buffer: vk.CommandBuffer) !void {
 
     // Create the Image View:
     {
-        var info = vk.ImageViewCreateInfo{
+        const info = vk.ImageViewCreateInfo{
             .image = bd.FontImage,
             .viewType = .T_2D,
             .format = .R8G8B8A8_UNORM,
@@ -569,17 +569,17 @@ pub fn CreateFontsTexture(command_buffer: vk.CommandBuffer) !void {
 
     // Create the Upload Buffer:
     {
-        var buffer_info = vk.BufferCreateInfo{
+        const buffer_info = vk.BufferCreateInfo{
             .size = upload_size,
             .usage = .{ .transferSrc = true },
             .sharingMode = .EXCLUSIVE,
         };
         bd.UploadBuffer = try vk.CreateBuffer(v.Device, buffer_info, v.VkAllocator);
-        var req = vk.GetBufferMemoryRequirements(v.Device, bd.UploadBuffer);
+        const req = vk.GetBufferMemoryRequirements(v.Device, bd.UploadBuffer);
         if (req.alignment > bd.BufferMemoryAlignment) {
             bd.BufferMemoryAlignment = req.alignment;
         }
-        var alloc_info = vk.MemoryAllocateInfo{
+        const alloc_info = vk.MemoryAllocateInfo{
             .allocationSize = req.size,
             .memoryTypeIndex = MemoryType(.{ .hostVisible = true }, req.memoryTypeBits).?,
         };
@@ -590,8 +590,8 @@ pub fn CreateFontsTexture(command_buffer: vk.CommandBuffer) !void {
     // Upload to Buffer:
     {
         var map: [*]u8 = undefined;
-        try vk.MapMemory(v.Device, bd.UploadBufferMemory, 0, upload_size, .{}, @ptrCast(**anyopaque, &map));
-        std.mem.copy(u8, map[0..upload_size], pixels.?[0..upload_size]);
+        try vk.MapMemory(v.Device, bd.UploadBufferMemory, 0, upload_size, .{}, @as(**anyopaque, @ptrCast(&map)));
+        std.mem.copyForwards(u8, map[0..upload_size], pixels.?[0..upload_size]);
         var range = [_]vk.MappedMemoryRange{vk.MappedMemoryRange{
             .memory = bd.UploadBufferMemory,
             .size = upload_size,
@@ -632,7 +632,7 @@ pub fn CreateFontsTexture(command_buffer: vk.CommandBuffer) !void {
             .bufferRowLength = 0,
             .bufferImageHeight = 0,
             .imageOffset = vk.Offset3D{ .x = 0, .y = 0, .z = 0 },
-            .imageExtent = vk.Extent3D{ .width = @intCast(u32, width), .height = @intCast(u32, height), .depth = 1 },
+            .imageExtent = vk.Extent3D{ .width = @as(u32, @intCast(width)), .height = @as(u32, @intCast(height)), .depth = 1 },
         }};
         vk.CmdCopyBufferToImage(command_buffer, bd.UploadBuffer, bd.FontImage, .TRANSFER_DST_OPTIMAL, &region);
 
@@ -656,7 +656,7 @@ pub fn CreateFontsTexture(command_buffer: vk.CommandBuffer) !void {
     }
 
     // Store our identifier
-    io.Fonts.?.SetTexID(@intToPtr(imgui.TextureID, @enumToInt(bd.FontDescriptorSet)));
+    io.Fonts.?.SetTexID(@as(imgui.TextureID, @ptrFromInt(@intFromEnum(bd.FontDescriptorSet))));
 }
 
 fn CreateShaderModules(device: vk.Device, allocator: ?*const vk.AllocationCallbacks) !void {
@@ -1016,7 +1016,7 @@ pub fn Init(info: *InitInfo, render_pass: vk.RenderPass) !void {
     assert(info.MinImageCount >= 2);
     assert(info.ImageCount >= info.MinImageCount);
 
-    const bd = @ptrCast(*Data, @alignCast(@alignOf(Data), imgui.MemAlloc(@sizeOf(Data)).?));
+    const bd = @as(*Data, @ptrCast(@alignCast(imgui.MemAlloc(@sizeOf(Data)).?)));
     bd.* = .{
         .VulkanInitInfo = info.*,
         .RenderPass = render_pass,
@@ -1283,7 +1283,7 @@ fn CreateWindowSwapChain(physical_device: vk.PhysicalDevice, device: vk.Device, 
         const imagesResult = try vk.GetSwapchainImagesKHR(device, wd.Swapchain, backbuffers[0..wd.ImageCount]);
         assert(imagesResult.result == .SUCCESS);
 
-        wd.ImageCount = @intCast(u32, imagesResult.swapchainImages.len);
+        wd.ImageCount = @as(u32, @intCast(imagesResult.swapchainImages.len));
         assert(wd.Frames.len == 0);
         wd.Frames = try wd.Allocator.alloc(Frame, wd.ImageCount);
         wd.FrameSemaphores = try wd.Allocator.alloc(FrameSemaphores, wd.ImageCount);
@@ -1461,10 +1461,10 @@ fn DestroyWindowRenderBuffers(device: vk.Device, buffers: *WindowRenderBuffers, 
 // converts *T to *[1]T
 fn arrayPtrType(comptime ptrType: type) type {
     var info = @typeInfo(ptrType);
-    info.Pointer.child = [1]info.Pointer.child;
+    info.pointer.child = [1]info.pointer.child;
     return @Type(info);
 }
 
 fn arrayPtr(ptr: anytype) arrayPtrType(@TypeOf(ptr)) {
-    return @ptrCast(arrayPtrType(@TypeOf(ptr)), ptr);
+    return @as(arrayPtrType(@TypeOf(ptr)), ptr);
 }

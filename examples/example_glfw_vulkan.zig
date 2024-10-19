@@ -1,7 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-const imgui = @import("imgui");
+const imgui = @import("imgui.zig");
 const glfw = @import("include/glfw.zig");
 const vk = @import("include/vk.zig");
 
@@ -44,7 +44,7 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
     // Create Vulkan Instance
     {
         var create_info = vk.InstanceCreateInfo{
-            .enabledExtensionCount = @intCast(u32, extensions.len),
+            .enabledExtensionCount = @intCast(extensions.len),
             .ppEnabledExtensionNames = extensions.ptr,
         };
 
@@ -57,17 +57,17 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
             // Enable debug report extension (we need additional storage, so we duplicate the user array to add our new extension to it)
             const extensions_ext = try allocator.alloc([*:0]const u8, extensions.len + 1);
             defer allocator.free(extensions_ext);
-            std.mem.copy([*:0]const u8, extensions_ext[0..extensions.len], extensions);
+            std.mem.copyForwards([*:0]const u8, extensions_ext[0..extensions.len], extensions);
             extensions_ext[extensions.len] = "VK_EXT_debug_report";
 
-            create_info.enabledExtensionCount = @intCast(u32, extensions_ext.len);
+            create_info.enabledExtensionCount = @intCast(extensions_ext.len);
             create_info.ppEnabledExtensionNames = extensions_ext.ptr;
 
             // Create Vulkan Instance
             g_Instance = try vk.CreateInstance(create_info, g_Allocator);
 
             // Get the function pointer (required for any extensions)
-            var vkCreateDebugReportCallbackEXT = @ptrCast(?*const @TypeOf(vk.vkCreateDebugReportCallbackEXT), vk.GetInstanceProcAddr(g_Instance, "vkCreateDebugReportCallbackEXT")).?;
+            const vkCreateDebugReportCallbackEXT = @as(?*const @TypeOf(vk.vkCreateDebugReportCallbackEXT), @ptrCast(vk.GetInstanceProcAddr(g_Instance, "vkCreateDebugReportCallbackEXT"))).?;
 
             // Setup the debug report callback
             var debug_report_ci = vk.DebugReportCallbackCreateInfoEXT{
@@ -75,8 +75,8 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
                 .pfnCallback = debug_report,
                 .pUserData = null,
             };
-            var err = vkCreateDebugReportCallbackEXT(g_Instance, &debug_report_ci, g_Allocator, &g_DebugReport);
-            if (@enumToInt(err) < 0) {
+            const err = vkCreateDebugReportCallbackEXT(g_Instance, &debug_report_ci, g_Allocator, &g_DebugReport);
+            if (@intFromEnum(err) < 0) {
                 return error.CreateDebugCallbackFailed;
             }
         } else {
@@ -87,10 +87,10 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
 
     // Select GPU
     {
-        var gpu_count = try vk.EnumeratePhysicalDevicesCount(g_Instance);
+        const gpu_count = try vk.EnumeratePhysicalDevicesCount(g_Instance);
         assert(gpu_count > 0);
 
-        var gpus = try allocator.alloc(vk.PhysicalDevice, gpu_count);
+        const gpus = try allocator.alloc(vk.PhysicalDevice, gpu_count);
         defer allocator.free(gpus);
         _ = try vk.EnumeratePhysicalDevices(g_Instance, gpus);
 
@@ -106,13 +106,13 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
 
     // Select graphics queue family
     {
-        var count = vk.GetPhysicalDeviceQueueFamilyPropertiesCount(g_PhysicalDevice);
-        var queues = try allocator.alloc(vk.QueueFamilyProperties, count);
+        const count = vk.GetPhysicalDeviceQueueFamilyPropertiesCount(g_PhysicalDevice);
+        const queues = try allocator.alloc(vk.QueueFamilyProperties, count);
         defer allocator.free(queues);
         _ = vk.GetPhysicalDeviceQueueFamilyProperties(g_PhysicalDevice, queues);
         for (queues, 0..) |queue, i| {
             if (queue.queueFlags.graphics) {
-                g_QueueFamily = @intCast(u32, i);
+                g_QueueFamily = @as(u32, @intCast(i));
                 break;
             }
         }
@@ -130,10 +130,10 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
                 .pQueuePriorities = &queue_priority,
             },
         };
-        var create_info = vk.DeviceCreateInfo{
-            .queueCreateInfoCount = @intCast(u32, queue_info.len),
+        const create_info = vk.DeviceCreateInfo{
+            .queueCreateInfoCount = @as(u32, queue_info.len),
             .pQueueCreateInfos = &queue_info,
-            .enabledExtensionCount = @intCast(u32, device_extensions.len),
+            .enabledExtensionCount = @as(u32, device_extensions.len),
             .ppEnabledExtensionNames = &device_extensions,
         };
         g_Device = try vk.CreateDevice(g_PhysicalDevice, create_info, g_Allocator);
@@ -155,10 +155,10 @@ fn SetupVulkan(extensions: []const [*:0]const u8, allocator: std.mem.Allocator) 
             vk.DescriptorPoolSize{ .inType = .STORAGE_BUFFER_DYNAMIC, .descriptorCount = 1000 },
             vk.DescriptorPoolSize{ .inType = .INPUT_ATTACHMENT, .descriptorCount = 1000 },
         };
-        var pool_info = vk.DescriptorPoolCreateInfo{
+        const pool_info = vk.DescriptorPoolCreateInfo{
             .flags = .{ .freeDescriptorSet = true },
-            .maxSets = 1000 * @intCast(u32, pool_sizes.len),
-            .poolSizeCount = @intCast(u32, pool_sizes.len),
+            .maxSets = 1000 * @as(u32, pool_sizes.len),
+            .poolSizeCount = @as(u32, pool_sizes.len),
             .pPoolSizes = &pool_sizes,
         };
         g_DescriptorPool = try vk.CreateDescriptorPool(g_Device, pool_info, g_Allocator);
@@ -171,7 +171,7 @@ fn SetupVulkanWindow(wd: *impl_vulkan.Window, surface: vk.SurfaceKHR, width: u32
     wd.Surface = surface;
     wd.Allocator = allocator;
 
-    var res = try vk.GetPhysicalDeviceSurfaceSupportKHR(g_PhysicalDevice, g_QueueFamily, surface);
+    const res = try vk.GetPhysicalDeviceSurfaceSupportKHR(g_PhysicalDevice, g_QueueFamily, surface);
     if (res != vk.TRUE) {
         return error.NoWSISupport;
     }
@@ -200,7 +200,7 @@ fn CleanupVulkan() void {
 
     if (IMGUI_VULKAN_DEBUG_REPORT) {
         // Remove the debug report callback
-        const vkDestroyDebugReportCallbackEXT = @ptrCast(?*const @TypeOf(vk.vkDestroyDebugReportCallbackEXT), vk.GetInstanceProcAddr(g_Instance, "vkDestroyDebugReportCallbackEXT"));
+        const vkDestroyDebugReportCallbackEXT = @as(?*const @TypeOf(vk.vkDestroyDebugReportCallbackEXT), @ptrCast(vk.GetInstanceProcAddr(g_Instance, "vkDestroyDebugReportCallbackEXT")));
         assert(vkDestroyDebugReportCallbackEXT != null);
         vkDestroyDebugReportCallbackEXT.?(g_Instance, g_DebugReport, g_Allocator);
     }
@@ -236,13 +236,13 @@ fn FrameRender(wd: *impl_vulkan.Window, draw_data: *imgui.DrawData) !void {
     }
     {
         try vk.ResetCommandPool(g_Device, fd.CommandPool, .{});
-        var info = vk.CommandBufferBeginInfo{
+        const info = vk.CommandBufferBeginInfo{
             .flags = .{ .oneTimeSubmit = true },
         };
         try vk.BeginCommandBuffer(fd.CommandBuffer, info);
     }
     {
-        var info = vk.RenderPassBeginInfo{
+        const info = vk.RenderPassBeginInfo{
             .renderPass = wd.RenderPass,
             .framebuffer = fd.Framebuffer,
             .renderArea = vk.Rect2D{
@@ -250,7 +250,7 @@ fn FrameRender(wd: *impl_vulkan.Window, draw_data: *imgui.DrawData) !void {
                 .extent = vk.Extent2D{ .width = wd.Width, .height = wd.Height },
             },
             .clearValueCount = 1,
-            .pClearValues = @ptrCast([*]vk.ClearValue, &g_ClearColor),
+            .pClearValues = @ptrCast(&g_ClearColor),
         };
         vk.CmdBeginRenderPass(fd.CommandBuffer, info, .INLINE);
     }
@@ -281,7 +281,7 @@ fn FramePresent(wd: *impl_vulkan.Window) !void {
     if (g_SwapChainRebuild)
         return;
     const render_complete_semaphore = wd.FrameSemaphores[wd.SemaphoreIndex].RenderCompleteSemaphore;
-    var info = vk.PresentInfoKHR{
+    const info = vk.PresentInfoKHR{
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = arrayPtr(&render_complete_semaphore),
         .swapchainCount = 1,
@@ -303,7 +303,7 @@ fn FramePresent(wd: *impl_vulkan.Window) !void {
 }
 
 fn glfw_error_callback(err: c_int, description: ?[*:0]const u8) callconv(.C) void {
-    var nonnull_desc: [*:0]const u8 = description orelse "";
+    const nonnull_desc: [*:0]const u8 = description orelse "";
     std.debug.print("Glfw Error {}: {s}\n", .{ err, nonnull_desc });
 }
 
@@ -316,7 +316,7 @@ pub fn main() !void {
         return error.GlfwInitFailed;
 
     glfw.glfwWindowHint(glfw.GLFW_CLIENT_API, glfw.GLFW_NO_API);
-    var window = glfw.glfwCreateWindow(1280, 720, "Dear ImGui GLFW+Vulkan example", null, null).?;
+    const window = glfw.glfwCreateWindow(1280, 720, "Dear ImGui GLFW+Vulkan example", null, null).?;
 
     // Setup Vulkan
     if (glfw.glfwVulkanSupported() == 0) {
@@ -330,7 +330,7 @@ pub fn main() !void {
     // Create Window Surface
     var surface: vk.SurfaceKHR = undefined;
     const err = glfw.glfwCreateWindowSurface(g_Instance, window, g_Allocator, &surface);
-    if (@enumToInt(err) < 0) {
+    if (@intFromEnum(err) < 0) {
         return error.CouldntCreateSufrace;
     }
 
@@ -339,7 +339,7 @@ pub fn main() !void {
     var h: c_int = 0;
     glfw.glfwGetFramebufferSize(window, &w, &h);
     const wd = &g_MainWindowData;
-    try SetupVulkanWindow(wd, surface, @intCast(u32, w), @intCast(u32, h), allocator);
+    try SetupVulkanWindow(wd, surface, @as(u32, @intCast(w)), @as(u32, @intCast(h)), allocator);
 
     // Setup Dear ImGui context
     imgui.CHECKVERSION();
@@ -353,7 +353,7 @@ pub fn main() !void {
     //imgui.StyleColorsClassic(null);
 
     // Setup Platform/Renderer backends
-    var initResult = impl_glfw.InitForVulkan(window, true);
+    const initResult = impl_glfw.InitForVulkan(window, true);
     assert(initResult);
 
     var init_info = impl_vulkan.InitInfo{
@@ -441,7 +441,7 @@ pub fn main() !void {
             glfw.glfwGetFramebufferSize(window, &width, &height);
             if (width > 0 and height > 0) {
                 try impl_vulkan.SetMinImageCount(g_MinImageCount);
-                try impl_vulkan.CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_MainWindowData, g_QueueFamily, g_Allocator, @intCast(u32, width), @intCast(u32, height), g_MinImageCount);
+                try impl_vulkan.CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_MainWindowData, g_QueueFamily, g_Allocator, @as(u32, @intCast(width)), @as(u32, @intCast(height)), g_MinImageCount);
                 g_MainWindowData.FrameIndex = 0;
                 g_SwapChainRebuild = false;
             }
@@ -465,7 +465,7 @@ pub fn main() !void {
             _ = imgui.Checkbox("Another Window", &show_another_window);
 
             _ = imgui.SliderFloat("float", &slider_value, 0.0, 1.0); // Edit 1 float using a slider from 0.0 to 1.0
-            _ = imgui.ColorEdit3("clear color", @ptrCast(*[3]f32, &g_ClearColor)); // Edit 3 floats representing a color
+            _ = imgui.ColorEdit3("clear color", @ptrCast(&g_ClearColor)); // Edit 3 floats representing a color
 
             if (imgui.Button("Button")) // Buttons return true when clicked (most widgets return true when edited/activated)
                 counter += 1;
@@ -515,25 +515,25 @@ fn ArrayPtrType(comptime ptrType: type) type {
     comptime {
         // Check that the input is of type *T
         var info = @typeInfo(ptrType);
-        assert(info == .Pointer);
-        assert(info.Pointer.size == .One);
-        assert(info.Pointer.sentinel == null);
+        assert(info == .pointer);
+        assert(info.pointer.size == .One);
+        assert(info.pointer.sentinel == null);
 
         // Create the new value type, [1]T
         const arrayInfo = std.builtin.Type{
-            .Array = .{
+            .array = .{
                 .len = 1,
-                .child = info.Pointer.child,
+                .child = info.pointer.child,
                 .sentinel = null,
             },
         };
 
         // Patch the type to be *[1]T, preserving other modifiers
         const singleArrayType = @Type(arrayInfo);
-        info.Pointer.child = singleArrayType;
+        info.pointer.child = singleArrayType;
         // also need to change the type of the sentinel
         // we checked that this is null above so no work needs to be done here.
-        info.Pointer.sentinel = null;
+        info.pointer.sentinel = null;
         return @Type(info);
     }
 }

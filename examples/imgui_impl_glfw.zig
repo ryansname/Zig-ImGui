@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const imgui = @import("imgui");
+const imgui = @import("imgui.zig");
 const glfw = @import("include/glfw.zig");
 const assert = std.debug.assert;
 
@@ -47,16 +47,16 @@ const Data = extern struct {
 // - Otherwise we may need to store a GLFWWindow* -> ImGuiContext* map and handle this in the backend, adding a little bit of extra complexity to it.
 // FIXME: some shared resources (mouse cursor shape, gamepad) are mishandled when using multi-context.
 fn GetBackendData() ?*Data {
-    return if (imgui.GetCurrentContext() != null) @ptrCast(?*Data, @alignCast(@alignOf(Data), imgui.GetIO().BackendPlatformUserData)) else null;
+    return if (imgui.GetCurrentContext() != null) @as(?*Data, @ptrCast(@alignCast(imgui.GetIO().BackendPlatformUserData))) else null;
 }
 
 // Functions
 fn GetClipboardText(user_data: ?*anyopaque) callconv(.C) ?[*:0]const u8 {
-    return glfw.glfwGetClipboardString(@ptrCast(*glfw.GLFWwindow, user_data));
+    return glfw.glfwGetClipboardString(@as(*glfw.GLFWwindow, @ptrCast(user_data)));
 }
 
 fn SetClipboardText(user_data: ?*anyopaque, text: ?[*:0]const u8) callconv(.C) void {
-    glfw.glfwSetClipboardString(@ptrCast(*glfw.GLFWwindow, user_data), text.?);
+    glfw.glfwSetClipboardString(@as(*glfw.GLFWwindow, @ptrCast(user_data)), text.?);
 }
 
 fn KeyToImGuiKey(key: i32) imgui.Key {
@@ -208,7 +208,7 @@ pub fn ScrollCallback(window: *glfw.GLFWwindow, xoffset: f64, yoffset: f64) call
         bd.PrevUserCallbackScroll.?(window, xoffset, yoffset);
 
     const io = imgui.GetIO();
-    io.AddMouseWheelEvent(@floatCast(f32, xoffset), @floatCast(f32, yoffset));
+    io.AddMouseWheelEvent(@as(f32, @floatCast(xoffset)), @as(f32, @floatCast(yoffset)));
 }
 
 fn TranslateUntranslatedKey(raw_key: i32, scancode: i32) i32 {
@@ -273,8 +273,8 @@ pub fn CursorPosCallback(window: *glfw.GLFWwindow, x: f64, y: f64) callconv(.C) 
         bd.PrevUserCallbackCursorPos.?(window, x, y);
 
     const io = imgui.GetIO();
-    io.AddMousePosEvent(@floatCast(f32, x), @floatCast(f32, y));
-    bd.LastValidMousePos = .{ .x = @floatCast(f32, x), .y = @floatCast(f32, y) };
+    io.AddMousePosEvent(@as(f32, @floatCast(x)), @as(f32, @floatCast(y)));
+    bd.LastValidMousePos = .{ .x = @as(f32, @floatCast(x)), .y = @as(f32, @floatCast(y)) };
 }
 
 // Workaround: X11 seems to send spurious Leave/Enter events which would make us lose our position,
@@ -357,7 +357,7 @@ fn Init(window: *glfw.GLFWwindow, install_callbacks: bool, client_api: GlfwClien
     assert(io.BackendPlatformUserData == null); // Already initialized a platform backend!
 
     // Setup backend capabilities flags
-    const bd = @ptrCast(*Data, @alignCast(@alignOf(Data), imgui.MemAlloc(@sizeOf(Data))));
+    const bd = @as(*Data, @ptrCast(@alignCast(imgui.MemAlloc(@sizeOf(Data)))));
     bd.* = .{
         .Window = window,
         .Time = 0,
@@ -383,21 +383,21 @@ fn Init(window: *glfw.GLFWwindow, install_callbacks: bool, client_api: GlfwClien
     // GLFW will emit an error which will often be printed by the app, so we temporarily disable error reporting.
     // Missing cursors will return NULL and our _UpdateMouseCursor() function will use the Arrow cursor instead.)
     const prev_error_callback = glfw.glfwSetErrorCallback(null);
-    bd.MouseCursors[@enumToInt(imgui.MouseCursor.Arrow)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
-    bd.MouseCursors[@enumToInt(imgui.MouseCursor.TextInput)] = glfw.glfwCreateStandardCursor(glfw.GLFW_IBEAM_CURSOR);
-    bd.MouseCursors[@enumToInt(imgui.MouseCursor.ResizeNS)] = glfw.glfwCreateStandardCursor(glfw.GLFW_VRESIZE_CURSOR);
-    bd.MouseCursors[@enumToInt(imgui.MouseCursor.ResizeEW)] = glfw.glfwCreateStandardCursor(glfw.GLFW_HRESIZE_CURSOR);
-    bd.MouseCursors[@enumToInt(imgui.MouseCursor.Hand)] = glfw.glfwCreateStandardCursor(glfw.GLFW_HAND_CURSOR);
+    bd.MouseCursors[@intFromEnum(imgui.MouseCursor.Arrow)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
+    bd.MouseCursors[@intFromEnum(imgui.MouseCursor.TextInput)] = glfw.glfwCreateStandardCursor(glfw.GLFW_IBEAM_CURSOR);
+    bd.MouseCursors[@intFromEnum(imgui.MouseCursor.ResizeNS)] = glfw.glfwCreateStandardCursor(glfw.GLFW_VRESIZE_CURSOR);
+    bd.MouseCursors[@intFromEnum(imgui.MouseCursor.ResizeEW)] = glfw.glfwCreateStandardCursor(glfw.GLFW_HRESIZE_CURSOR);
+    bd.MouseCursors[@intFromEnum(imgui.MouseCursor.Hand)] = glfw.glfwCreateStandardCursor(glfw.GLFW_HAND_CURSOR);
     if (GLFW_HAS_NEW_CURSORS) {
-        bd.MouseCursors[@enumToInt(imgui.MouseCursor.ResizeAll)] = glfw.glfwCreateStandardCursor(glfw.GLFW_RESIZE_ALL_CURSOR);
-        bd.MouseCursors[@enumToInt(imgui.MouseCursor.ResizeNESW)] = glfw.glfwCreateStandardCursor(glfw.GLFW_RESIZE_NESW_CURSOR);
-        bd.MouseCursors[@enumToInt(imgui.MouseCursor.ResizeNWSE)] = glfw.glfwCreateStandardCursor(glfw.GLFW_RESIZE_NWSE_CURSOR);
-        bd.MouseCursors[@enumToInt(imgui.MouseCursor.NotAllowed)] = glfw.glfwCreateStandardCursor(glfw.GLFW_NOT_ALLOWED_CURSOR);
+        bd.MouseCursors[@intFromEnum(imgui.MouseCursor.ResizeAll)] = glfw.glfwCreateStandardCursor(glfw.GLFW_RESIZE_ALL_CURSOR);
+        bd.MouseCursors[@intFromEnum(imgui.MouseCursor.ResizeNESW)] = glfw.glfwCreateStandardCursor(glfw.GLFW_RESIZE_NESW_CURSOR);
+        bd.MouseCursors[@intFromEnum(imgui.MouseCursor.ResizeNWSE)] = glfw.glfwCreateStandardCursor(glfw.GLFW_RESIZE_NWSE_CURSOR);
+        bd.MouseCursors[@intFromEnum(imgui.MouseCursor.NotAllowed)] = glfw.glfwCreateStandardCursor(glfw.GLFW_NOT_ALLOWED_CURSOR);
     } else {
-        bd.MouseCursors[@enumToInt(imgui.MouseCursor.ResizeAll)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
-        bd.MouseCursors[@enumToInt(imgui.MouseCursor.ResizeNESW)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
-        bd.MouseCursors[@enumToInt(imgui.MouseCursor.ResizeNWSE)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
-        bd.MouseCursors[@enumToInt(imgui.MouseCursor.NotAllowed)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
+        bd.MouseCursors[@intFromEnum(imgui.MouseCursor.ResizeAll)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
+        bd.MouseCursors[@intFromEnum(imgui.MouseCursor.ResizeNESW)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
+        bd.MouseCursors[@intFromEnum(imgui.MouseCursor.ResizeNWSE)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
+        bd.MouseCursors[@intFromEnum(imgui.MouseCursor.NotAllowed)] = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
     }
     _ = glfw.glfwSetErrorCallback(prev_error_callback);
 
@@ -452,8 +452,8 @@ fn UpdateMouseData() void {
             var mouse_x: f64 = 0;
             var mouse_y: f64 = 0;
             glfw.glfwGetCursorPos(bd.Window.?, &mouse_x, &mouse_y);
-            io.AddMousePosEvent(@floatCast(f32, mouse_x), @floatCast(f32, mouse_y));
-            bd.LastValidMousePos = .{ .x = @floatCast(f32, mouse_x), .y = @floatCast(f32, mouse_y) };
+            io.AddMousePosEvent(@as(f32, @floatCast(mouse_x)), @as(f32, @floatCast(mouse_y)));
+            bd.LastValidMousePos = .{ .x = @as(f32, @floatCast(mouse_x)), .y = @as(f32, @floatCast(mouse_y)) };
         }
     }
 }
@@ -471,7 +471,7 @@ fn UpdateMouseCursor() void {
     } else {
         // Show OS mouse cursor
         // FIXME-PLATFORM: Unfocused windows seems to fail changing the mouse cursor with GLFW 3.2, but 3.3 works here.
-        glfw.glfwSetCursor(bd.Window.?, bd.MouseCursors[@intCast(usize, @enumToInt(imgui_cursor))] orelse bd.MouseCursors[@intCast(usize, @enumToInt(imgui.MouseCursor.Arrow))]);
+        glfw.glfwSetCursor(bd.Window.?, bd.MouseCursors[@as(usize, @intCast(@intFromEnum(imgui_cursor)))] orelse bd.MouseCursors[@as(usize, @intCast(@intFromEnum(imgui.MouseCursor.Arrow)))]);
         glfw.glfwSetInputMode(bd.Window.?, glfw.GLFW_CURSOR, glfw.GLFW_CURSOR_NORMAL);
     }
 }
@@ -557,17 +557,17 @@ pub fn NewFrame() void {
     var display_h: c_int = 0;
     glfw.glfwGetWindowSize(bd.Window.?, &w, &h);
     glfw.glfwGetFramebufferSize(bd.Window.?, &display_w, &display_h);
-    io.DisplaySize = .{ .x = @intToFloat(f32, w), .y = @intToFloat(f32, h) };
+    io.DisplaySize = .{ .x = @as(f32, @floatFromInt(w)), .y = @as(f32, @floatFromInt(h)) };
     if (w > 0 and h > 0) {
         io.DisplayFramebufferScale = .{
-            .x = @intToFloat(f32, display_w) / @intToFloat(f32, w),
-            .y = @intToFloat(f32, display_h) / @intToFloat(f32, h),
+            .x = @as(f32, @floatFromInt(display_w)) / @as(f32, @floatFromInt(w)),
+            .y = @as(f32, @floatFromInt(display_h)) / @as(f32, @floatFromInt(h)),
         };
     }
 
     // Setup time step
     const current_time = glfw.glfwGetTime();
-    io.DeltaTime = if (bd.Time > 0) @floatCast(f32, current_time - bd.Time) else (1.0 / 60.0);
+    io.DeltaTime = if (bd.Time > 0) @as(f32, @floatCast(current_time - bd.Time)) else (1.0 / 60.0);
     bd.Time = current_time;
 
     UpdateMouseData();
